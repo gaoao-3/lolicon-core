@@ -184,7 +184,15 @@ export class AbstractClient {
 
   /** 将工具实例转为 AI 可用的函数定义数组 */
   #buildToolDefs (tools) {
-    return tools.map(t => t.toolDef || t).filter(d => d && (d.function || d.name))
+    return tools.map(t => {
+      const def = t.toolDef || t
+      if (!def) return null
+      // 已是嵌套格式 → 直接返回
+      if (def.function) return def
+      // 平铺格式 → 包装为 { function: { name, description, parameters } }
+      if (def.name) return { function: def }
+      return null
+    }).filter(Boolean)
   }
 
   // ── 辅助 ──────────────────────────────────────
