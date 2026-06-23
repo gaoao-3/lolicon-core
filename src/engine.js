@@ -133,7 +133,8 @@ export class LoliEngine {
       conversationId: cid,
       options: sendOpts,
       systemPrompt,
-      tools
+      tools,
+      event           // ← 传递 Yunzai 事件给客户端 → 工具
     })
   }
 

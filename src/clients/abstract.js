@@ -4,7 +4,7 @@
  *
  * 核心流程:
  *   user msg → _sendMessage() → AI response
- *     ├─ 有 toolCalls → 执行工具 → 结果回传 → 循环
+ *     ├─ 有 toolCalls → 执行工具（注入事件上下文）→ 结果回传 → 循环
  *     └─ 无 → 返回最终文本
  */
 import { randomUUID } from 'crypto'
@@ -14,7 +14,7 @@ import { randomUUID } from 'crypto'
 export class AbstractClient {
   /** @type {LoliStorage} */
   storage
-  /** @type {Function[]} 已加载的工具 */
+  /** @type {Object[]} 已加载的工具实例 */
   tools = []
   /** @type {Object} */
   options
@@ -46,6 +46,13 @@ export class AbstractClient {
     throw new Error('_sendMessage must be implemented by subclass')
   }
 
+  // ── 工具调用循环 ──────────────────────────────
+
+  /** 最大工具调用轮次 */
+  #MAX_ROUNDS = 8
+  /** 同一工具最大连续调用次数 */
+  #MAX_SAME_CALL = 2
+
   /**
    * 发送消息（含工具调用循环 + 历史管理）
    *
@@ -54,15 +61,13 @@ export class AbstractClient {
    * @param {string} params.conversationId
    * @param {Object} params.options - sendMessageOption
    * @param {UnifiedMessage} [params.systemPrompt]
-   * @param {Function[]} [params.tools] - 此轮可用的工具
+   * @param {Object[]} [params.tools] - 此轮可用的工具实例
+   * @param {Object} [params.event] - Yunzai 事件，注入工具上下文
    * @returns {Promise<{response: UnifiedMessage, finalText: string}>}
    */
-  async sendMessage ({ userMessage, conversationId, options = {}, systemPrompt, tools = [] }) {
-    const MAX_TOOL_ROUNDS = 8
-    const MAX_SAME_CALL = 2
-
+  async sendMessage ({ userMessage, conversationId, options = {}, systemPrompt, tools = [], event }) {
     this.tools = tools
-    const toolDefs = tools.map(t => t.toolDef || t).filter(Boolean)
+    const toolDefs = this.#buildToolDefs(tools)
 
     // 1. 加载历史
     let histories = await this.storage.getHistory(conversationId, 50)
@@ -75,14 +80,14 @@ export class AbstractClient {
       }
     }
 
-    // 3. 保存用户消息到 LMDB + 追加到历史
+    // 3. 保存用户消息
     userMessage.id = userMessage.id || randomUUID()
     userMessage.conversationId = conversationId
     await this.storage.saveHistory(userMessage)
     histories.push(userMessage)
 
     // 4. 首轮调用
-    let callCount = {}
+    const callCount = {}
     let currentResponse = await this._sendMessage(histories, { ...options, tools: toolDefs })
 
     // 5. 保存模型响应
@@ -92,37 +97,32 @@ export class AbstractClient {
 
     // 6. 工具调用循环
     let round = 0
-    while (this._hasToolCalls(currentResponse) && round < MAX_TOOL_ROUNDS) {
+    while (this._hasToolCalls(currentResponse) && round < this.#MAX_ROUNDS) {
       round++
 
-      // 执行工具
       const toolCalls = this._getToolCalls(currentResponse)
       const toolResults = []
+
       for (const tc of toolCalls) {
         const key = tc.name
         callCount[key] = (callCount[key] || 0) + 1
-        if (callCount[key] > MAX_SAME_CALL) {
-          toolResults.push({ name: tc.name, content: '[TOOL_LIMIT] 此工具调用已达上限' })
+
+        if (callCount[key] > this.#MAX_SAME_CALL) {
+          toolResults.push({ name: tc.name, content: `[TOOL_LIMIT] 调用次数已达上限 (${this.#MAX_SAME_CALL})` })
           continue
         }
+
         const tool = tools.find(t => (t.name || t.toolDef?.function?.name) === tc.name)
         if (!tool) {
-          toolResults.push({ name: tc.name, content: '[TOOL_NOT_FOUND]' })
+          toolResults.push({ name: tc.name, content: `[TOOL_NOT_FOUND] 工具 "${tc.name}" 未安装` })
           continue
         }
-        try {
-          const fn = typeof tool.run === 'function' ? tool.run : tool
-          const result = await fn(tc.args, {/* context passed from plugin */})
-          toolResults.push({
-            name: tc.name,
-            content: typeof result === 'string' ? result : JSON.stringify(result)
-          })
-        } catch (err) {
-          toolResults.push({ name: tc.name, content: `[TOOL_ERROR] ${err.message}` })
-        }
+
+        const result = await this.#executeTool(tool, tc.args, event)
+        toolResults.push({ name: tc.name, content: result })
       }
 
-      // 工具结果消息
+      // 工具结果写入历史
       const toolMsg = {
         id: randomUUID(),
         role: 'tool',
@@ -147,11 +147,47 @@ export class AbstractClient {
     // 7. 提取最终文本
     const finalText = this._extractText(currentResponse)
 
-    return {
-      response: currentResponse,
-      finalText
+    return { response: currentResponse, finalText }
+  }
+
+  // ── 工具执行（可被子类覆盖） ──────────────────
+
+  /**
+   * 执行单个工具调用
+   * @param {Object} tool - 工具实例 { name, toolDef, run }
+   * @param {Object} args - 工具参数
+   * @param {Object} [event] - Yunzai 事件上下文
+   * @returns {Promise<string>}
+   */
+  async #executeTool (tool, args, event) {
+    try {
+      const runFn = typeof tool.run === 'function' ? tool.run : tool
+      if (!runFn) throw new Error(`工具 ${tool.name} 没有 run() 方法`)
+
+      // 构建上下文：工具可通过第二个参数拿到事件
+      const context = event ? { event } : {}
+
+      const start = Date.now()
+      const result = await runFn(args, context)
+      const duration = Date.now() - start
+
+      this.logger(`[loli] tool ${tool.name}(${duration}ms): ${JSON.stringify(args).slice(0, 60)} → ${typeof result === 'string' ? result.slice(0, 40) : 'object'}`)
+
+      return typeof result === 'string' ? result : JSON.stringify(result)
+    } catch (err) {
+      this.logger(`[loli] tool ${tool.name} error: ${err.message}`)
+      return `[TOOL_ERROR] ${err.message}`
     }
   }
+
+  // ── 工具定义提取 ──────────────────────────────
+
+  /** 将工具实例转为 AI 可用的函数定义数组 */
+  #buildToolDefs (tools) {
+    return tools.map(t => t.toolDef || t).filter(d => d && (d.function || d.name))
+  }
+
+  // ── 辅助 ──────────────────────────────────────
 
   /** @param {UnifiedMessage} msg */
   _hasToolCalls (msg) {
