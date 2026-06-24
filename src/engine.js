@@ -291,6 +291,7 @@ export class LoliEngine {
   listChannels () { return this.storage.listChannels() }
   savePreset (p) { return this.storage.savePreset(p) }
   listPresets () { return this.storage.listPresets() }
+  getPreset (id) { return this.storage.getPreset(id) }
 
   /** 导出可读的记忆图谱 Markdown */
   getMemoryMarkdown () {
