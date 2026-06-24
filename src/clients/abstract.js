@@ -63,9 +63,10 @@ export class AbstractClient {
    * @param {UnifiedMessage} [params.systemPrompt]
    * @param {Object[]} [params.tools] - 此轮可用的工具实例
    * @param {Object} [params.event] - Yunzai 事件，注入工具上下文
+   * @param {Object} [params.toolContext] - 额外工具上下文（如 anythingllm 客户端）
    * @returns {Promise<{response: UnifiedMessage, finalText: string}>}
    */
-  async sendMessage ({ userMessage, conversationId, options = {}, systemPrompt, tools = [], event }) {
+  async sendMessage ({ userMessage, conversationId, options = {}, systemPrompt, tools = [], event, toolContext }) {
     this.tools = tools
     const toolDefs = this.#buildToolDefs(tools)
 
@@ -118,7 +119,7 @@ export class AbstractClient {
           continue
         }
 
-        const result = await this.#executeTool(tool, tc.args, event)
+        const result = await this.#executeTool(tool, tc.args, event, toolContext)
         toolResults.push({ name: tc.name, content: result })
       }
 
@@ -157,15 +158,17 @@ export class AbstractClient {
    * @param {Object} tool - 工具实例 { name, toolDef, run }
    * @param {Object} args - 工具参数
    * @param {Object} [event] - Yunzai 事件上下文
+   * @param {Object} [toolContext] - 额外工具上下文（如 anythingllm 客户端）
    * @returns {Promise<string>}
    */
-  async #executeTool (tool, args, event) {
+  async #executeTool (tool, args, event, toolContext) {
     try {
       const runFn = typeof tool.run === 'function' ? tool.run : tool
       if (!runFn) throw new Error(`工具 ${tool.name} 没有 run() 方法`)
 
-      // 构建上下文：工具可通过第二个参数拿到事件
-      const context = event ? { event } : {}
+      // 构建上下文：工具可通过第二个参数拿到事件和额外客户端
+      const context = { ...toolContext }
+      if (event) context.event = event
 
       const start = Date.now()
       const result = await runFn(args, context)

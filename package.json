@@ -1,15 +1,21 @@
 {
   "name": "lolicon-core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "轻量级 AI 对话引擎 — JSON 存储 + Gemini/OpenAI + 工具热加载",
   "type": "module",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./storage": "./src/storage.js",
+    "./memory": "./src/memory/index.js",
     "./clients/gemini": "./src/clients/gemini.js",
     "./clients/openai": "./src/clients/openai.js",
+    "./clients/anythingllm": "./src/clients/anythingllm.js",
     "./loaders/tools": "./src/loaders/tools.js"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "test": "node test-memory.js"
   },
   "dependencies": {
     "@google/genai": "^1.0.0",
