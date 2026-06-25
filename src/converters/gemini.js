@@ -48,21 +48,22 @@ export function fromChaiteConverter (msg) {
         switch (c.type) {
           case 'text': {
             if (typeof c.text === 'string' && c.text.trim()) {
+              // 不回传 thoughtSignature —— 避免多轮对话时签名失效导致 "Corrupted thought signature" 400 错误
               /** @type {import('@google/genai').Part} */
               const part = { text: c.text }
-              if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
               parts.push(part)
             }
             break
           }
           case 'reasoning': {
+            // 不回传 thoughtSignature，避免签名失效
             /** @type {import('@google/genai').Part} */
             const part = { text: c.text || '', thought: true }
-            if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
             parts.push(part)
             break
           }
           case 'image': {
+            // 不回传 thoughtSignature
             /** @type {import('@google/genai').Part} */
             const part = {
               inlineData: {
@@ -70,11 +71,11 @@ export function fromChaiteConverter (msg) {
                 data: c.image
               }
             }
-            if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
             parts.push(part)
             break
           }
           case 'toolCall': {
+            // 不回传 thoughtSignature
             /** @type {import('@google/genai').Part} */
             const part = {
               functionCall: {
@@ -82,7 +83,6 @@ export function fromChaiteConverter (msg) {
                 args: c.args ? JSON.parse(c.args) : {}
               }
             }
-            if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
             parts.push(part)
             break
           }

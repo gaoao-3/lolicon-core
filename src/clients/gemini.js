@@ -105,6 +105,23 @@ export class GeminiClient extends AbstractClient {
       const response = await genAI.models.generateContent(generateConfig)
       return intoChaiteConverter(response, model)
     } catch (err) {
+      // "Corrupted thought signature" 400 错误 → 自动降级：关闭思考模式重试一次
+      const isSignatureError =
+        err?.message?.includes('thought signature') ||
+        err?.message?.includes('Corrupted thought') ||
+        err?.status === 400
+
+      if (isSignatureError && generateConfig.config.thinkingConfig) {
+        this.logger?.warn?.('[Gemini] Thought signature error, retrying without thinking mode')
+        delete generateConfig.config.thinkingConfig
+        try {
+          const response = await genAI.models.generateContent(generateConfig)
+          return intoChaiteConverter(response, model)
+        } catch (retryErr) {
+          throw retryErr
+        }
+      }
+
       // Gemini SDK 有时把非正常响应包进 Error
       if (err.message?.includes('candidates') || err.status === 400) {
         this.logger?.warn?.('[Gemini] API error:', err.message?.slice(0, 200))
