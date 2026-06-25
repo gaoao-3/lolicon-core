@@ -215,10 +215,24 @@ export class AbstractClient {
   _extractText (msg) {
     if (!msg) return ''
     return (msg.content || [])
-      .filter(c => (c.type === 'text' || c.type === 'reasoning') && c.text)
+      .filter(c => c.type === 'text' && c.text)
       .map(c => c.text)
       .join('\n')
       .replace(/\[usage:.*?\]/g, '')
+      .trim()
+  }
+
+  /**
+   * 提取推理/思考内容
+   * @param {UnifiedMessage} msg
+   * @returns {string}
+   */
+  _extractReasoning (msg) {
+    if (!msg) return ''
+    return (msg.content || [])
+      .filter(c => c.type === 'reasoning' && c.text)
+      .map(c => c.text)
+      .join('\n')
       .trim()
   }
 }
