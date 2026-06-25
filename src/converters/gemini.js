@@ -56,12 +56,10 @@ export function fromChaiteConverter (msg) {
             break
           }
           case 'reasoning': {
-            if (typeof c.text === 'string' && c.text.trim()) {
-              /** @type {import('@google/genai').Part} */
-              const part = { text: c.text }
-              if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
-              parts.push(part)
-            }
+            /** @type {import('@google/genai').Part} */
+            const part = { text: c.text || '', thought: true }
+            if (c.thoughtSignature) part.thoughtSignature = c.thoughtSignature
+            parts.push(part)
             break
           }
           case 'image': {
@@ -142,6 +140,14 @@ export function intoChaiteConverter (response, model) {
         name: part.functionCall.name,
         args: JSON.stringify(part.functionCall.args || {}),
         thoughtSignature: part.thoughtSignature || undefined
+      })
+    }
+    // 处理仅有签名无文本的 thinking block（多轮对话连续性需要）
+    else if (part.thought === true && part.thoughtSignature) {
+      content.push({
+        type: 'reasoning',
+        text: '',
+        thoughtSignature: part.thoughtSignature
       })
     }
   }

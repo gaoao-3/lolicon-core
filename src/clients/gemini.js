@@ -59,16 +59,20 @@ export class GeminiClient extends AbstractClient {
       }
     }
 
-    // 思考模式
+    // 思考模式 (Gemini thinking signature 兼容)
     if (options.enableReasoning) {
-      const effort = {
-        low: 'LOW',
-        medium: 'MEDIUM',
-        high: 'HIGH'
-      }[options.reasoningEffort] || 'LOW'
+      /** @type {import('@google/genai').ThinkingLevel} */
+      let thinkingLevel
+      switch (options.reasoningEffort) {
+        case 'off':    thinkingLevel = 'MINIMAL'; break
+        case 'low':    thinkingLevel = 'LOW'; break
+        case 'medium': thinkingLevel = 'MEDIUM'; break
+        case 'high':   thinkingLevel = 'HIGH'; break
+        default:       thinkingLevel = 'LOW'
+      }
 
       generateConfig.config.thinkingConfig = {
-        thinkingBudget: effort === 'HIGH' ? 2048 : effort === 'MEDIUM' ? 1024 : 512,
+        thinkingLevel,
         includeThoughts: true
       }
     }
