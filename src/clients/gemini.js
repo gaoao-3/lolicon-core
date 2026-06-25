@@ -63,12 +63,23 @@ export class GeminiClient extends AbstractClient {
     if (options.enableReasoning) {
       /** @type {import('@google/genai').ThinkingLevel} */
       let thinkingLevel
-      switch (options.reasoningEffort) {
-        case 'off':    thinkingLevel = 'MINIMAL'; break
-        case 'low':    thinkingLevel = 'LOW'; break
-        case 'medium': thinkingLevel = 'MEDIUM'; break
-        case 'high':   thinkingLevel = 'HIGH'; break
-        default:       thinkingLevel = 'LOW'
+      const requestedLevel = String(options.thinkingLevel || options.reasoningEffort || 'LOW').toUpperCase()
+      switch (requestedLevel) {
+        case 'OFF':
+        case 'MINIMAL':
+          thinkingLevel = 'MINIMAL'
+          break
+        case 'LOW':
+          thinkingLevel = 'LOW'
+          break
+        case 'MEDIUM':
+          thinkingLevel = 'MEDIUM'
+          break
+        case 'HIGH':
+          thinkingLevel = 'HIGH'
+          break
+        default:
+          thinkingLevel = 'LOW'
       }
 
       generateConfig.config.thinkingConfig = {

@@ -58,6 +58,23 @@ export class OpenAIClient extends AbstractClient {
       params.tool_choice = 'auto'
     }
 
+    // 思考模式 (OpenAI o-series reasoning_effort)
+    if (options.enableReasoning) {
+      const effortMap = { OFF: 'minimal', LOW: 'low', MEDIUM: 'medium', HIGH: 'high' }
+      const level = String(options.thinkingLevel || options.reasoningEffort || 'LOW').toUpperCase()
+      const effort = effortMap[level] || 'low'
+      if (effort === 'minimal') {
+        // minimal: 不发送 reasoning_effort，让模型自行决定
+      } else {
+        params.reasoning_effort = effort
+      }
+      // o-series 不支持 temperature
+      if (model.startsWith('o1') || model.startsWith('o3') || model.startsWith('o4')) {
+        delete params.temperature
+        delete params.max_tokens
+      }
+    }
+
     const completion = await client.chat.completions.create(params)
     return intoChaiteConverter(completion.choices[0], model)
   }

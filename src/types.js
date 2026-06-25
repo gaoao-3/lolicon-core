@@ -24,6 +24,7 @@
  * @property {number} [sendMessageOption.temperature=0.9]
  * @property {number} [sendMessageOption.maxTokens=2048]
  * @property {boolean} [sendMessageOption.enableReasoning=false]
+ * @property {'OFF'|'LOW'|'MEDIUM'|'HIGH'} [sendMessageOption.thinkingLevel]
  * @property {'low'|'medium'|'high'} [sendMessageOption.reasoningEffort]
  * @property {Object} [systemPrompt]
  * @property {'enabled'|'disabled'} [status='enabled']
